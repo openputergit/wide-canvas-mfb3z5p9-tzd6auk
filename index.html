@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MedManager - Student Attendance Module</title>
+    <script src="https://unpkg.com/three@0.139.2/build/three.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <style>
+        #bg-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: -1;
+        }
+        .glass {
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-white min-h-screen">
+    <canvas id="bg-canvas"></canvas>
+
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <div class="glass rounded-lg p-6 mb-8">
+            <h1 class="text-3xl font-bold mb-2">Student Attendance System</h1>
+            <div class="flex flex-wrap gap-4">
+                <button id="addStudentBtn" class="bg-blue-500 hover:bg-blue-600 px-4 py-2 rounded-lg">
+                    <i class="bi bi-person-plus"></i> Add Student
+                </button>
+                <button id="markAttendanceBtn" class="bg-green-500 hover:bg-green-600 px-4 py-2 rounded-lg">
+                    <i class="bi bi-calendar-check"></i> Mark Attendance
+                </button>
+                <button id="viewReportBtn" class="bg-purple-500 hover:bg-purple-600 px-4 py-2 rounded-lg">
+                    <i class="bi bi-graph-up"></i> View Reports
+                </button>
+            </div>
+        </div>
+
+        <!-- Main Content Area -->
+        <div id="mainContent" class="glass rounded-lg p-6">
+            <!-- Dynamic Content will be loaded here -->
+            <div id="studentList" class="hidden">
+                <h2 class="text-2xl font-bold mb-4">Student List</h2>
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead>
+                            <tr class="border-b border-gray-300">
+                                <th class="py-2 px-4 text-left">Roll No</th>
+                                <th class="py-2 px-4 text-left">Name</th>
+                                <th class="py-2 px-4 text-left">Class</th>
+                                <th class="py-2 px-4 text-left">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="studentTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="attendanceForm" class="hidden">
+                <h2 class="text-2xl font-bold mb-4">Mark Attendance</h2>
+                <div class="mb-4">
+                    <label class="block mb-2">Date:</label>
+                    <input type="date" id="attendanceDate" class="bg-slate-800 rounded px-3 py-2">
+                </div>
+                <div id="attendanceList" class="space-y-2"></div>
+                <button id="submitAttendance" class="mt-4 bg-green-500 hover:bg-green-600 px-4 py-2 rounded-lg">
+                    Submit Attendance
+                </button>
+            </div>
+
+            <div id="reportView" class="hidden">
+                <h2 class="text-2xl font-bold mb-4">Attendance Report</h2>
+                <div class="mb-4 flex gap-4">
+                    <div>
+                        <label class="block mb-2">From:</label>
+                        <input type="date" id="reportStartDate" class="bg-slate-800 rounded px-3 py-2">
+                    </div>
+                    <div>
+                        <label class="block mb-2">To:</label>
+                        <input type="date" id="reportEndDate" class="bg-slate-800 rounded px-3 py-2">
+                    </div>
+                    <button id="generateReport" class="mt-8 bg-purple-500 hover:bg-purple-600 px-4 py-2 rounded-lg">
+                        Generate Report
+                    </button>
+                </div>
+                <div id="reportData" class="mt-4"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Student Modal -->
+    <div id="addStudentModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+        <div class="glass rounded-lg p-6 w-full max-w-md">
+            <h2 class="text-2xl font-bold mb-4">Add New Student</h2>
+            <form id="studentForm" class="space-y-4">
+                <div>
+                    <label class="block mb-2">Roll Number:</label>
+                    <input type="text" id="rollNo" class="w-full bg-slate-800 rounded px-3 py-2" required>
+                </div>
+                <div>
+                    <label class="block mb-2">Name:</label>
+                    <input type="text" id="studentName" class="w-full bg-slate-800 rounded px-3 py-2" required>
+                </div>
+                <div>
+                    <label class="block mb-2">Class:</label>
+                    <input type="text" id="className" class="w-full bg-slate-800 rounded px-3 py-2" required>
+                </div>
+                <div class="flex justify-end gap-4">
+                    <button type="button" id="cancelAddStudent" class="bg-gray-500 hover:bg-gray-600 px-4 py-2 rounded-lg">Cancel</button>
+                    <button type="submit" class="bg-blue-500 hover:bg-blue-600 px-4 py-2 rounded-lg">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Three.js Background
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ canvas: document.querySelector('#bg-canvas') });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+
+        const geometry = new THREE.IcosahedronGeometry(1, 0);
+        const material = new THREE.MeshBasicMaterial({ color: 0x44aa88, wireframe: true });
+        const cube = new THREE.Mesh(geometry, material);
+        scene.add(cube);
+
+        camera.position.z = 5;
+
+        function animate() {
+            requestAnimationFrame(animate);
+            cube.rotation.x += 0.001;
+            cube.rotation.y += 0.001;
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // Initialize MongoDB App
+        const appSlug = 'student-attendance-123456';
+
+        // Utility Functions
+        const generateUUID = () => {
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                const r = Math.random() * 16 | 0;
+                const v = c == 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+        };
+
+        const userId = localStorage.getItem('userId') || generateUUID();
+        localStorage.setItem('userId', userId);
+
+        // DOM Elements
+        const addStudentBtn = document.getElementById('addStudentBtn');
+        const markAttendanceBtn = document.getElementById('markAttendanceBtn');
+        const viewReportBtn = document.getElementById('viewReportBtn');
+        const addStudentModal = document.getElementById('addStudentModal');
+        const studentForm = document.getElementById('studentForm');
+        const cancelAddStudent = document.getElementById('cancelAddStudent');
+        const mainContent = document.getElementById('mainContent');
+        const studentList = document.getElementById('studentList');
+        const attendanceForm = document.getElementById('attendanceForm');
+        const reportView = document.getElementById('reportView');
+
+        // Event Listeners
+        addStudentBtn.addEventListener('click', () => {
+            addStudentModal.classList.remove('hidden');
+        });
+
+        cancelAddStudent.addEventListener('click', () => {
+            addStudentModal.classList.add('hidden');
+        });
+
+        studentForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const student = {
+                rollNo: document.getElementById('rollNo').value,
+                name: document.getElementById('studentName').value,
+                class: document.getElementById('className').value
+            };
+
+            try {
+                const response = await fetch('https://r0c8kgwocscg8gsokogwwsw4.zetaverse.one/mongodb', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Bearer wBwnWY1xYmVQEhWUd36JN1vks7v2',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        appSlug,
+                        action: 'create',
+                        collection: 'students',
+                        data: student
+                    })
+                });
+
+                if (response.ok) {
+                    addStudentModal.classList.add('hidden');
+                    studentForm.reset();
+                    loadStudents();
+                }
+            } catch (error) {
+                console.error('Error adding student:', error);
+            }
+        });
+
+        markAttendanceBtn.addEventListener('click', async () => {
+            studentList.classList.add('hidden');
+            reportView.classList.add('hidden');
+            attendanceForm.classList.remove('hidden');
+            await loadStudentsForAttendance();
+        });
+
+        viewReportBtn.addEventListener('click', () => {
+            studentList.classList.add('hidden');
+            attendanceForm.classList.add('hidden');
+            reportView.classList.remove('hidden');
+        });
+
+        // Load Students
+        async function loadStudents() {
+            try {
+                const response = await fetch('https://r0c8kgwocscg8gsokogwwsw4.zetaverse.one/mongodb', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Bearer wBwnWY1xYmVQEhWUd36JN1vks7v2',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        appSlug,
+                        action: 'read',
+                        collection: 'students'
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    const studentTableBody = document.getElementById('studentTableBody');
+                    studentTableBody.innerHTML = '';
+
+                    data.result.read.forEach(student => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td class="py-2 px-4">${student.data.rollNo}</td>
+                            <td class="py-2 px-4">${student.data.name}</td>
+                            <td class="py-2 px-4">${student.data.class}</td>
+                            <td class="py-2 px-4">
+                                <button class="text-red-500 hover:text-red-600" onclick="deleteStudent('${student._id}')">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </td>
+                        `;
+                        studentTableBody.appendChild(row);
+                    });
+
+                    studentList.classList.remove('hidden');
+                    attendanceForm.classList.add('hidden');
+                    reportView.classList.add('hidden');
+                }
+            } catch (error) {
+                console.error('Error loading students:', error);
+            }
+        }
+
+        // Delete Student
+        async function deleteStudent(id) {
+            if (confirm('Are you sure you want to delete this student?')) {
+                try {
+                    await fetch('https://r0c8kgwocscg8gsokogwwsw4.zetaverse.one/mongodb', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': 'Bearer wBwnWY1xYmVQEhWUd36JN1vks7v2',
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            appSlug,
+                            action: 'delete',
+                            collection: 'students',
+                            id
+                        })
+                    });
+                    loadStudents();
+                } catch (error) {
+                    console.error('Error deleting student:', error);
+                }
+            }
+        }
+
+        // Load Students for Attendance
+        async function loadStudentsForAttendance() {
+            try {
+                const response = await fetch('https://r0c8kgwocscg8gsokogwwsw4.zetaverse.one/mongodb', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Bearer wBwnWY1xYmVQEhWUd36JN1vks7v2',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        appSlug,
+                        action: 'read',
+                        collection: 'students'
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    const attendanceList = document.getElementById('attendanceList');
+                    attendanceList.innerHTML = '';
+
+                    data.result.read.forEach(student => {
+                        const div = document.createElement('div');
+                        div.className = 'flex items-center gap-4';
+                        div.innerHTML = `
+                            <label class="flex items-center gap-2">
+                                <input type="checkbox" class="attendance-checkbox" data-student-id="${student._id}">
+                                ${student.data.name} (${student.data.rollNo})
+                            </label>
+                        `;
+                        attendanceList.appendChild(div);
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading students for attendance:', error);
+            }
+        }
+
+        // Submit Attendance
+        document.getElementById('submitAttendance').addEventListener('click', async () => {
+            const date = document.getElementById('attendanceDate').value;
+            const checkboxes = document.querySelectorAll('.attendance-checkbox');
+            const attendance = [];
+
+            checkboxes.forEach(checkbox => {
+                attendance.push({
+                    studentId: checkbox.dataset.studentId,
+                    present: checkbox.checked
+                });
+            });
+
+            try {
+                await fetch('https://r0c8kgwocscg8gsokogwwsw4.zetaverse.one/mongodb', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Bearer wBwnWY1xYmVQEhWUd36JN1vks7v2',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        appSlug,
+                        action: 'create',
+                        collection: 'attendance',
+                        data: {
+                            date,
+                            attendance
+                        }
+                    })
+                });
+
+                alert('Attendance submitted successfully!');
+                document.getElementById('attendanceDate').value = '';
+                checkboxes.forEach(checkbox => checkbox.checked = false);
+            } catch (error) {
+                console.error('Error submitting attendance:', error);
+            }
+        });
+
+        // Generate Report
+        document.getElementById('generateReport').addEventListener('click', async () => {
+            const startDate = document.getElementById('reportStartDate').value;
+            const endDate = document.getElementById('reportEndDate').value;
+
+            try {
+                const response = await fetch('https://r0c8kgwocscg8gsokogwwsw4.zetaverse.one/mongodb', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Bearer wBwnWY1xYmVQEhWUd36JN1vks7v2',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        appSlug,
+                        action: 'read',
+                        collection: 'attendance',
+                        conditions: {
+                            date: {
+                                $gte: startDate,
+                                $lte: endDate
+                            }
+                        }
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    const reportData = document.getElementById('reportData');
+                    reportData.innerHTML = `
+                        <div class="glass rounded-lg p-4">
+                            <h3 class="text-xl font-bold mb-2">Report Summary</h3>
+                            <p>Total Records: ${data.result.read.length}</p>
+                            <div class="mt-4">
+                                ${data.result.read.map(record => `
+                                    <div class="mb-2">
+                                        <strong>Date:</strong> ${record.data.date}
+                                        <br>
+                                        <strong>Present:</strong> ${record.data.attendance.filter(a => a.present).length}
+                                        <strong>Absent:</strong> ${record.data.attendance.filter(a => !a.present).length}
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error generating report:', error);
+            }
+        });
+
+        // Initial load
+        loadStudents();
+
+        // Handle window resize for Three.js
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+<script>document.body.addEventListener('wheel', e => { if (!e.ctrlKey) return; e.preventDefault(); return }, { passive: false })</script>
+	</body>
+</html>
